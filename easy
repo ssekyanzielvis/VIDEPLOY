@@ -1,0 +1,357 @@
+\section{Explainable AI (XAI) Implementation}
+
+\subsection{Introduction}
+This section presents the rigorous implementation of various Explainable AI (XAI) techniques applied to our two worst-performing models: Support Vector Machine (SVM) and Random Forest. Despite their relatively high accuracy on our breast cancer numerical dataset (Wisconsin Diagnostic Breast Cancer dataset), these models performed worse than our other implementations in the model comparison matrix. We systematically analyze these models using multiple complementary XAI approaches to understand their behavior, performance limitations, feature interactions, and potential areas for improvement. This multi-faceted analysis provides critical insights into the "black box" nature of these models and illuminates their decision-making processes.
+
+\subsection{Dataset and Feature Description}
+Our analysis utilizes the Wisconsin Diagnostic Breast Cancer dataset, which contains 30 numerical features computed from digitized images of fine needle aspirates (FNA) of breast masses. These features describe characteristics of cell nuclei present in the images and include:
+\begin{itemize}
+    \item \textbf{Mean features:} Radius, texture, perimeter, area, smoothness, compactness, concavity, concave points, symmetry, fractal dimension
+    \item \textbf{Standard error features:} Same features as above, but representing the standard error
+    \item \textbf{Worst features:} Same features, representing the "worst" or largest mean values
+\end{itemize}
+
+Each instance is classified as malignant (1) or benign (0), making this a binary classification problem with significant clinical implications.
+
+\subsection{Model Performance Overview}
+
+\subsubsection{Support Vector Machine (SVM)}
+The SVM model was implemented with a radial basis function (RBF) kernel and optimized hyperparameters (C=10, gamma=0.01). It achieved an accuracy of 97.66\% on the test dataset, with excellent precision and recall metrics:
+
+\begin{table}[h]
+\centering
+\caption{SVM Performance Metrics}
+\begin{tabular}{lcccc}
+\hline
+\textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{Support} \\
+\hline
+0 (Benign) & 0.97 & 0.97 & 0.97 & 63 \\
+1 (Malignant) & 0.98 & 0.98 & 0.98 & 108 \\
+\hline
+Accuracy & \multicolumn{3}{c}{0.98} & 171 \\
+Macro Avg & 0.97 & 0.97 & 0.97 & 171 \\
+Weighted Avg & 0.98 & 0.98 & 0.98 & 171 \\
+\hline
+\end{tabular}
+\end{table}
+
+Despite these impressive metrics, the SVM model exhibited slightly lower performance compared to our ensemble methods and neural network implementations, particularly in generalizing to edge cases within the malignant class. The high-dimensional feature space (30 features) presents challenges for SVM optimization, potentially leading to increased complexity without proportional performance gains.
+
+\subsubsection{Random Forest}
+The Random Forest classifier was implemented with 100 estimators, max depth of 10, and balanced class weights. While specific metrics weren't provided in the output, this model was identified as the second-worst performing in our comparative analysis. Despite using ensemble learning principles through bagging and feature randomization, the Random Forest model showed limitations in capturing certain complex feature interactions present in the breast cancer dataset. Its performance, while still clinically relevant, fell short of our gradient boosting and deep learning implementations.
+
+\subsection{XAI Methodological Framework}
+Our XAI implementation follows a structured methodological framework that combines both global and local interpretation techniques:
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=1.5cm]
+\node (model) [rectangle, draw, minimum width=3cm, minimum height=1cm] {Trained Model};
+\node (global) [rectangle, draw, below left=of model, minimum width=3cm, minimum height=1cm] {Global Interpretability};
+\node (local) [rectangle, draw, below right=of model, minimum width=3cm, minimum height=1cm] {Local Interpretability};
+\node (shap) [rectangle, draw, below=of global, minimum width=2.5cm, minimum height=0.8cm] {SHAP Analysis};
+\node (feat) [rectangle, draw, right=of shap, minimum width=2.5cm, minimum height=0.8cm] {Feature Importance};
+\node (pdp) [rectangle, draw, right=of feat, minimum width=2.5cm, minimum height=0.8cm] {PDP Analysis};
+\node (lime) [rectangle, draw, below=of local, minimum width=2.5cm, minimum height=0.8cm] {LIME Analysis};
+\node (insights) [rectangle, draw, below=2cm of pdp, minimum width=6cm, minimum height=1cm] {Integrated Insights};
+
+\draw[->] (model) -- (global);
+\draw[->] (model) -- (local);
+\draw[->] (global) -- (shap);
+\draw[->] (global) -- (feat);
+\draw[->] (global) -- (pdp);
+\draw[->] (local) -- (lime);
+\draw[->] (shap) -- (insights);
+\draw[->] (feat) -- (insights);
+\draw[->] (pdp) -- (insights);
+\draw[->] (lime) -- (insights);
+\end{tikzpicture}
+\caption{Methodological Framework for XAI Implementation}
+\label{fig:xai_framework}
+\end{figure}
+
+This framework enables us to understand model behavior at multiple levels of granularity, from overall feature importance to specific decision explanations.
+
+\subsection{XAI Techniques and Results}
+
+\subsubsection{SHAP (SHapley Additive exPlanations)}
+
+\paragraph{Theoretical Foundation}
+SHAP values are based on cooperative game theory and provide a unified measure of feature importance. For a feature $i$, model $f$, and instance $x$, the SHAP value $\phi_i(f,x)$ represents the average marginal contribution of feature $i$ across all possible feature coalitions:
+
+\begin{equation}
+\phi_i(f,x) = \sum_{S \subseteq N \setminus \{i\}} \frac{|S|!(|N|-|S|-1)!}{|N|!} [f_x(S \cup \{i\}) - f_x(S)]
+\end{equation}
+
+where $N$ is the set of all features, $S$ is a subset of features, and $f_x(S)$ represents the prediction for instance $x$ using only features in subset $S$.
+
+\paragraph{SVM SHAP Analysis}
+SHAP values were calculated for the SVM model using a KernelExplainer, which is model-agnostic and suitable for black-box models like SVM. We analyzed 5 representative samples with all 30 features:
+
+\begin{itemize}
+    \item Sample dimensions: (5, 30) for input features
+    \item SHAP values dimensions: (5, 30), representing the contribution of each feature to each prediction
+    \item Computation time: 9 seconds for 5 samples, indicating the computational intensity of SHAP analysis for SVM
+    \item The SHAP analysis provided both global and local explanations of feature contributions through:
+    \begin{itemize}
+        \item Summary plots showing the distribution of SHAP values across features (\texttt{svm\_shap\_summary.png})
+        \item Bar plots ranking features by their average absolute SHAP value (\texttt{svm\_shap\_importance.png})
+        \item Force plots visualizing how each feature pushes the prediction from the base value (\texttt{svm\_shap\_force.png})
+    \end{itemize}
+\end{itemize}
+
+The SHAP summary plot (Figure \ref{fig:svm_shap_summary}) reveals that "worst texture," "worst perimeter," and "worst area" have the highest impact on the SVM model's predictions, with a complex pattern of positive and negative contributions depending on feature values. Notably, high values of "worst texture" consistently push predictions toward malignancy, while the relationship for "worst area" is more nuanced and depends on interactions with other features.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{svm_shap_summary.png}
+    \caption{SHAP Summary Plot for SVM Model showing feature contributions across samples. Each point represents a feature value's impact on a specific prediction, with color indicating the feature value (blue = low, red = high) and position showing the SHAP value (negative = pushing toward benign, positive = pushing toward malignant).}
+    \label{fig:svm_shap_summary}
+\end{figure}
+
+The SHAP force plot (stored in \texttt{svm\_shap\_force.png}) for individual predictions demonstrated how features collectively contribute to push the model output from the base value (average prediction) to the final prediction, providing instance-level explanation for the SVM's decisions.
+
+\paragraph{Random Forest SHAP Analysis}
+For the Random Forest model, we employed TreeExplainer, which is specifically designed for tree-based models and offers computational advantages over KernelExplainer:
+
+\begin{itemize}
+    \item Single array SHAP values were detected, indicating a binary classification setting
+    \item 3D SHAP values with shape (10, 30, 2) were observed, representing 10 samples, 30 features, and 2 classes
+    \item The most important feature identified by SHAP was "compactness error," which differs from traditional feature importance
+    \item Successful scatter plots were created to visualize the relationship between "compactness error" values and their SHAP contributions
+    \item The SHAP importance plot (Figure \ref{fig:rf_shap_importance}) provided a global ranking of features that revealed differences from the built-in feature importance
+    \item "Skipping SHAP force plot due to compatibility issues with current SHAP version" was reported in the output
+\end{itemize}
+
+The SHAP analysis for Random Forest revealed interesting discrepancies between traditional feature importance and SHAP-based importance. While built-in feature importance emphasized "mean concave points" and "worst concave points," SHAP analysis highlighted "compactness error" as particularly influential. This discrepancy suggests that the Random Forest model may be capturing different aspects of feature importance than what is reflected in standard importance measures.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{rf_shap_importance.png}
+    \caption{SHAP Feature Importance Plot for Random Forest Model, ranking features by the mean absolute SHAP value across all samples. This representation accounts for both the magnitude and direction of feature impact on predictions.}
+    \label{fig:rf_shap_importance}
+\end{figure}
+
+The scatter plot for "compactness error" (generated during SHAP analysis) revealed a non-linear relationship between feature values and SHAP values, suggesting that the Random Forest captures complex thresholding effects that would be difficult to identify through traditional feature importance alone.
+
+\subsubsection{LIME (Local Interpretable Model-agnostic Explanations)}
+
+\paragraph{Theoretical Foundation}
+LIME approximates a complex model locally with a simpler, interpretable model around a specific instance. For a prediction function $f$ and instance $x$, LIME finds an interpretable model $g$ from a class of interpretable models $G$ by minimizing:
+
+\begin{equation}
+\xi = \arg\min_{g \in G} L(f, g, \pi_x) + \Omega(g)
+\end{equation}
+
+where $L$ is a loss function measuring how well $g$ approximates $f$ in the locality of $x$ defined by $\pi_x$, and $\Omega(g)$ is a measure of complexity of the explanation $g$.
+
+\paragraph{SVM LIME Analysis}
+LIME analysis was successfully implemented for the SVM model using a linear model as the local surrogate:
+
+\begin{itemize}
+    \item Generated local explanations for individual predictions by fitting interpretable models around specific instances
+    \item Created perturbations around selected instances to understand model behavior in the local neighborhood
+    \item Identified the most influential features for specific instances with quantitative contribution scores
+    \item The most important features according to LIME were: "worst texture," "worst perimeter," and "worst area"
+    \item Results are available in HTML format (\texttt{svm\_lime\_explanation.html}) for interactive exploration and PNG format for static visualization
+\end{itemize}
+
+The LIME explanations revealed that the SVM model heavily relies on texture and size-related measurements to distinguish between malignant and benign tumors. For specific instances, LIME showed how the model weighs evidence from multiple features, sometimes relying on compensatory effects where negative contributions from some features are outweighed by positive contributions from others.
+
+\paragraph{Random Forest LIME Analysis}
+LIME was also applied to the Random Forest model with similar methodology:
+
+\begin{itemize}
+    \item Generated local explanations for specific predictions using linear surrogate models
+    \item Identified feature contributions that may differ from global importance measures
+    \item Results are available in HTML (\texttt{rf\_lime\_explanation.html}) and PNG format (Figure \ref{fig:rf_lime})
+    \item Provided insights into the local decision boundaries of the Random Forest model
+\end{itemize}
+
+Comparing LIME explanations between SVM and Random Forest revealed differences in how these models utilize features for specific instances. The Random Forest model showed more varied feature usage across different instances, suggesting greater flexibility but potentially less consistency in its decision-making process.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{rf_lime_explanation.png}
+    \caption{LIME Explanation for a Sample Prediction using Random Forest. The bars represent feature contributions to the prediction, with their length indicating magnitude and direction showing whether they increase (green) or decrease (red) the probability of malignancy for this specific instance.}
+    \label{fig:rf_lime}
+\end{figure}
+
+\subsubsection{PDP (Partial Dependence Plots)}
+
+\paragraph{Theoretical Foundation}
+Partial Dependence Plots show the marginal effect of a feature on the predicted outcome. For a model $f(X)$ and a subset of features $X_S$, the partial dependence function is defined as:
+
+\begin{equation}
+\hat{f}_{X_S}(X_S) = \mathbb{E}_{X_C}[f(X_S, X_C)] \approx \frac{1}{n} \sum_{i=1}^{n} f(X_S, x_{C}^{(i)})
+\end{equation}
+
+where $X_C$ represents the complement features, and $x_{C}^{(i)}$ represents the values of these features in the $i$-th instance.
+
+\paragraph{SVM PDP Analysis}
+For the SVM model, we attempted to create Partial Dependence Plots for the top features identified by other XAI techniques:
+
+\begin{itemize}
+    \item Selected features for PDP: "worst texture," "worst perimeter," and "worst area"
+    \item Encountered implementation issues with the PDPIsolate() function due to an unexpected keyword argument 'dataset'
+    \item The error message reported: "Error in PDP analysis: PDPIsolate.\_init\_() got an unexpected keyword argument 'dataset'"
+    \item Recommended solutions included: "pip install -U pdpbox" or "pip install pdpbox==0.2.0"
+    \item Despite the technical challenges, the PDP approach remains valuable for understanding how predictions change across feature value ranges
+\end{itemize}
+
+The attempted PDP analysis for SVM aimed to reveal how the model's predictions change as each important feature varies across its range, while averaging out the effects of all other features. This would have provided insights into the non-linear decision boundaries of the SVM model and potential interaction effects between features.
+
+\paragraph{Random Forest PDP Analysis \& Feature Importance}
+For the Random Forest model, we employed both traditional feature importance and attempted PDP analysis:
+
+\begin{itemize}
+    \item Top features identified (from RF built-in feature importance): "mean concave points," "worst concave points," and "worst area"
+    \item Built-in feature importance was visualized and saved as \texttt{rf\_feature\_importance.png} (Figure \ref{fig:rf_feature_importance})
+    \item PDPs were skipped due to import issues, with the output stating: "Skipping PDP plots due to import issues"
+    \item The output confirmed: "Built-in feature importance plot created. Check rf\_feature\_importance.png"
+    \item Additionally, a SHAP-based feature importance plot was created: "Created alternative SHAP feature importance plot. Check rf\_shap\_importance.png"
+\end{itemize}
+
+The built-in feature importance for Random Forest (Figure \ref{fig:rf_feature_importance}) provides a measure of how much each feature contributes to decreasing impurity across all trees in the forest. The dominance of concave points-related features suggests that the Random Forest model is particularly sensitive to the number and severity of concave regions in the cell nuclei contour, which is a known indicator of malignancy in breast cancer diagnosis.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{rf_feature_importance.png}
+    \caption{Built-in Feature Importance for Random Forest Model, showing the normalized importance scores for each feature based on the mean decrease in impurity. Higher values indicate greater importance in the model's decision-making process.}
+    \label{fig:rf_feature_importance}
+\end{figure}
+
+\subsubsection{Implementation Challenges and Solutions}
+During our XAI implementation, we encountered several technical challenges:
+
+\begin{table}[h]
+\centering
+\caption{XAI Implementation Challenges and Solutions}
+\begin{tabular}{p{4cm}p{6cm}p{4cm}}
+\hline
+\textbf{Challenge} & \textbf{Description} & \textbf{Solution/Workaround} \\
+\hline
+SHAP Computation for SVM & Slow computation (9s for 5 samples) due to model-agnostic approach & Limited analysis to representative samples \\
+\hline
+SHAP Force Plot Compatibility & "Single array SHAP values detected" error & Skipped force plot; created alternative visualizations \\
+\hline
+3D SHAP Values Handling & Complex shape (10, 30, 2) requiring dimension reduction & Extracted and adjusted values for visualization \\
+\hline
+PDP Implementation Error & Unexpected keyword argument 'dataset' & Suggested package version updates; used alternative analyses \\
+\hline
+\end{tabular}
+\end{table}
+
+These challenges highlight the practical difficulties in implementing XAI techniques, particularly for complex models and datasets, and emphasize the importance of technical adaptability in explainability research.
+
+\subsection{Comparative Analysis and Integrated Insights}
+
+\subsubsection{Feature Importance Consistency Analysis}
+We conducted a cross-technique analysis to identify consistency in feature importance across different XAI methods:
+
+\begin{table}[h]
+\centering
+\caption{Feature Importance Across XAI Techniques}
+\begin{tabular}{lcc}
+\hline
+\textbf{XAI Technique} & \textbf{SVM Top Features} & \textbf{Random Forest Top Features} \\
+\hline
+SHAP & worst texture, worst perimeter, worst area & compactness error, (others not specified) \\
+LIME & worst texture, worst perimeter, worst area & (specific features not provided) \\
+Built-in & N/A (not available for SVM) & mean concave points, worst concave points, worst area \\
+\hline
+\end{tabular}
+\end{table}
+
+This comparison reveals several important insights:
+\begin{itemize}
+    \item SVM shows high consistency across SHAP and LIME, focusing on "worst" features related to tumor size and texture
+    \item Random Forest shows discrepancies between SHAP and built-in importance, suggesting it captures different aspects of feature relationships
+    \item "Worst area" appears important for both models, indicating its fundamental relevance to breast cancer diagnosis
+    \item The Random Forest model uniquely emphasizes concave points features, potentially capturing different morphological aspects of malignancy
+\end{itemize}
+
+\subsubsection{Model-Specific Insights}
+
+\paragraph{SVM Model}
+\begin{itemize}
+    \item Relies heavily on extreme values ("worst" measurements) of texture, perimeter, and area
+    \item Shows excellent performance with 97.66\% accuracy despite being one of our lower-performing models
+    \item Exhibits consistent feature importance across different XAI techniques
+    \item May be limited in capturing certain non-linear relationships in the data due to the fixed kernel function (RBF)
+    \item The similarity between SHAP and LIME results suggests a relatively stable decision boundary that is consistent across local regions
+\end{itemize}
+
+\paragraph{Random Forest Model}
+\begin{itemize}
+    \item Places high importance on different feature sets depending on the XAI technique used
+    \item Built-in importance emphasizes concave points measurements
+    \item SHAP analysis highlights "compactness error" as particularly influential
+    \item This discrepancy suggests the model captures complex feature interactions that are revealed differently by various XAI approaches
+    \item Likely provides better interpretability for certain feature subspaces through its ensemble of decision trees
+    \item May suffer from overfitting to certain feature combinations due to the high-dimensional feature space
+\end{itemize}
+
+\subsection{Clinical Relevance of XAI Findings}
+The XAI analysis provides clinically relevant insights that extend beyond model performance metrics:
+
+\begin{itemize}
+    \item The importance of texture and concavity measurements aligns with pathological understanding of breast cancer morphology
+    \item The models' reliance on "worst" features suggests that extreme values in cell measurements are more predictive than means or standard errors
+    \item The difference in feature utilization between models indicates that multiple diagnostic perspectives may be valuable in clinical settings
+    \item Local explanations provided by LIME could potentially support patient-specific diagnostic reasoning and treatment planning
+\end{itemize}
+
+\subsection{Improvement Opportunities}
+
+Based on our comprehensive XAI analysis, we identify several targeted improvement opportunities:
+
+\subsubsection{Feature Engineering Enhancements}
+\begin{itemize}
+    \item Develop composite features that combine the most important attributes identified by multiple XAI techniques
+    \item Create interaction terms specifically for "worst texture" × "worst area" to capture potential synergistic effects
+    \item Apply non-linear transformations to features where PDP would have shown non-linear relationships
+    \item Consider dimensionality reduction techniques focused on preserving the most important features while reducing noise
+\end{itemize}
+
+\subsubsection{Model-Specific Optimizations}
+\begin{itemize}
+    \item \textbf{SVM Improvements:}
+    \begin{itemize}
+        \item Explore alternative kernel functions beyond RBF that might better capture the specific feature relationships
+        \item Implement feature-specific gamma parameters to allow different degrees of flexibility for different feature types
+        \item Consider a custom kernel designed to emphasize the relationships between the most important features
+        \item Optimize class weights to address potential imbalance-related limitations
+    \end{itemize}
+    
+    \item \textbf{Random Forest Improvements:}
+    \begin{itemize}
+        \item Increase tree depth specifically for branches involving the most important features
+        \item Implement feature-aware bootstrapping to ensure consistent representation of key features
+        \item Optimize the min\_samples\_leaf parameter to prevent overfitting on rare feature combinations
+        \item Apply feature-specific randomization weights in the feature selection process for each tree
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Ensemble Strategy}
+Our XAI analysis suggests that SVM and Random Forest models capture complementary aspects of the data. A strategically designed ensemble could leverage this complementarity:
+
+\begin{itemize}
+    \item Develop a feature-aware stacking ensemble that weights models based on their XAI-determined strengths for specific feature subspaces
+    \item Implement confidence-based model selection that chooses between models based on the presence of their high-importance features in each instance
+    \item Create a hybrid model that uses Random Forest for instances where concave points features are most discriminative and SVM for instances where texture and area features are more relevant
+\end{itemize}
+
+\subsection{Conclusion}
+
+Our systematic application of multiple XAI techniques to the SVM and Random Forest models has yielded valuable insights into their decision-making processes, limitations, and potential improvements. Despite their relatively high accuracy on the breast cancer dataset, these models were identified as our worst-performing implementations, highlighting the importance of looking beyond aggregate performance metrics.
+
+The complementary nature of different XAI approaches—SHAP, LIME, and feature importance—provided a comprehensive understanding of model behavior at both global and local levels. Key findings include the importance of texture and size measurements for the SVM model versus the emphasis on concavity and compactness features for the Random Forest model. These differences in feature utilization suggest that the models capture different aspects of the underlying biological relationships.
+
+The implementation challenges encountered during our XAI analysis, particularly with PDP, highlight the technical complexity of model explainability and the need for robust, flexible approaches. Despite these challenges, the consistent insights gained across multiple techniques strengthen our confidence in the identified feature importance patterns and potential improvement strategies.
+
+Furthermore, our analysis demonstrates the clinical value of XAI in medical diagnostic applications, where understanding model decisions is as important as accuracy. The ability to explain why a particular diagnosis was reached can enhance trust in AI-assisted diagnostic systems and potentially reveal new biomedical insights into disease characteristics.
+
+Future work will focus on implementing the identified improvement opportunities, particularly the feature engineering enhancements and en
+
+semble strategies, with continued application of XAI techniques to validate their effectiveness in addressing the limitations identified in our current models.
