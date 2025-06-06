@@ -1,5 +1,4 @@
 gunicorn
 flask
 yt_dlp
-PyQt5.QtWidgets
-PyQt5.QtCore
+PyQt5
